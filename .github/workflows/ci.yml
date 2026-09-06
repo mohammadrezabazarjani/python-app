@@ -9,11 +9,14 @@ on:
     branches:
       - main
 
+
 jobs:
+
   test:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -31,11 +34,15 @@ jobs:
         run: |
           pytest
 
+
   docker:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
+
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -56,3 +63,35 @@ jobs:
           tags: |
             mohammadrezabazarjani/python-app:latest
             mohammadrezabazarjani/python-app:${{ github.sha }}
+
+
+  update-infra:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: docker
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout infra repo
+        run: |
+          git clone https://x-access-token:${{ secrets.INFRA_REPO_TOKEN }}@github.com/mohammadrezabazarjani/infra-repo.git
+
+      - name: Update image tag
+        run: |
+          cd infra-repo
+
+          sed -i "s|image: mohammadrezabazarjani/python-app:.*|image: mohammadrezabazarjani/python-app:${{ github.sha }}|" k8s-manifest/deployment.yml
+
+      - name: Commit and push changes
+        run: |
+          cd infra-repo
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          git add k8s-manifest/deployment.yml
+
+          git commit -m "update python-app image to ${{ github.sha }}" || echo "No changes to commit"
+
+          git push origin main
